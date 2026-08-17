@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DC=(docker compose -f "mongo-sharding.yaml")
+DC=(docker compose -f "compose.yaml")
 
 echo "=== Docker services ==="
 "${DC[@]}" ps

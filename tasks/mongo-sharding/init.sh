@@ -7,7 +7,7 @@ set -euo pipefail
 # ------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="$SCRIPT_DIR/mongo-sharding.yaml"
+COMPOSE_FILE="$SCRIPT_DIR/compose.yaml"
 
 DC=(docker compose -f "$COMPOSE_FILE")
 
