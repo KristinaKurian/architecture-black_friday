@@ -18,6 +18,7 @@ services:
       MONGO_PORT: "27020"
       MONGO_DB: "somedb"
       MONGO_DATABASE: "somedb"
+      MONGODB_DATABASE_NAME: "somedb"
     depends_on:
       mongos_router:
         condition: service_started

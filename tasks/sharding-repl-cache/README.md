@@ -1,7 +1,3 @@
-# MongoDB Sharding + Replication + Redis Cache
-
-Решение задания 4. Проект является копией `mongo-sharding-repl` и сохраняет шардирование и репликацию MongoDB. Дополнительно добавлен Redis для кеширования запросов приложения.
-
 ## Архитектура
 
 ```text
@@ -29,36 +25,11 @@
                   shard1-2         shard2-2
                   shard1-3         shard2-3
 ```
-
-База данных: `somedb`.
-
-Коллекция: `helloDoc`.
-
-Shard key:
-
-```javascript
-{name: "hashed"}
-```
-
-Каждый shard имеет три реплики: одну `PRIMARY` и две `SECONDARY`.
-
 ## Redis
-
-В `compose.yaml` добавлен сервис Redis:
-
-```yaml
-redis:
-  image: redis:7-alpine
-  restart: unless-stopped
-```
-
-В приложение передаётся переменная окружения из задания:
 
 ```yaml
 REDIS_URL: "redis://redis:6379"
 ```
-
-`redis` — имя сервиса Docker Compose, поэтому приложение может обращаться к Redis по адресу `redis:6379` внутри общей сети.
 
 Кеширование приложения проверяется на эндпоинте:
 
@@ -66,26 +37,7 @@ REDIS_URL: "redis://redis:6379"
 /helloDoc/users
 ```
 
-## Структура директории
-
-Папка должна оставаться копией предыдущего проекта, поэтому `api_app` необходимо сохранить:
-
-```text
-sharding-repl-cache/
-├── api_app/
-│   ├── Dockerfile
-│   └── ...
-├── compose.yaml
-├── init.sh
-├── check.sh
-└── README.md
-```
-
 ## Запуск
-
-Перед запуском остановите предыдущий стенд `mongo-sharding-repl`, если он ещё работает: оба проекта используют host-порты `8080` и `27020`.
-
-Из `tasks/sharding-repl-cache`:
 
 ```bash
 docker compose down -v --remove-orphans
@@ -107,18 +59,6 @@ bash check.sh
 10. шардирует `somedb.helloDoc` по `{name: "hashed"}`;
 11. создаёт не менее 1000 документов;
 12. запускает `pymongo-api` с `REDIS_URL=redis://redis:6379`.
-
-## Проверка Redis
-
-```bash
-docker compose exec -T redis redis-cli ping
-```
-
-Ожидаемый результат:
-
-```text
-PONG
-```
 
 ## Проверка кеширования
 
@@ -176,24 +116,6 @@ OK: cached requests are < 100 ms
 SUCCESS
 ```
 
-## Приложение
-
-```text
-http://localhost:8080
-```
-
-Swagger:
-
-```text
-http://localhost:8080/docs
-```
-
-Кешируемый endpoint:
-
-```text
-http://localhost:8080/helloDoc/users
-```
-
 ## Полный сброс
 
 ```bash
@@ -201,5 +123,3 @@ docker compose down -v --remove-orphans
 bash init.sh
 bash check.sh
 ```
-
-Опция `-v` удаляет MongoDB volumes. Для Redis отдельный persistent volume не создаётся, потому что здесь Redis используется как кеш.
