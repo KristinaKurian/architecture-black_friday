@@ -17,6 +17,7 @@ services:
       MONGO_PORT: "27020"
       MONGO_DB: "somedb"
       MONGO_DATABASE: "somedb"
+      MONGODB_DATABASE_NAME: "somedb"
       REDIS_URL: "redis://redis:6379"
     depends_on:
       mongos_router:
