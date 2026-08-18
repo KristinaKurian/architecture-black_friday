@@ -98,14 +98,36 @@ wait_replica_ready() {
     exit 1
 }
 
+
+wait_redis() {
+    echo "Waiting for Redis..."
+
+    for ((i=1; i<=MAX_ATTEMPTS; i++)); do
+        result="$("${DC[@]}" exec -T redis redis-cli ping 2>/dev/null | tr -d '\r ')"
+
+        if [[ "$result" == "PONG" ]]; then
+            echo "OK: Redis is available"
+            return 0
+        fi
+
+        sleep "$SLEEP_SECONDS"
+    done
+
+    echo "ERROR: Redis is unavailable"
+    "${DC[@]}" logs --tail=100 redis || true
+    exit 1
+}
+
 echo
-echo "=== 1. Start Config Server and shard replicas ==="
+echo "=== 1. Start Redis, Config Server and shard replicas ==="
 
 "${DC[@]}" up -d \
+    redis \
     configSrv \
     shard1-1 shard1-2 shard1-3 \
     shard2-1 shard2-2 shard2-3
 
+wait_redis
 wait_mongo configSrv 27017
 wait_mongo shard1-1 27018
 wait_mongo shard1-2 27018
@@ -343,7 +365,7 @@ if ! [[ "$SHARD1_COUNT" =~ ^[0-9]+$ ]] \
 fi
 
 echo
-echo "=== 14. Start pymongo-api ==="
+echo "=== 14. Start pymongo-api with Redis cache ==="
 
 "${DC[@]}" up -d --build pymongo-api
 
@@ -355,6 +377,7 @@ echo "shard1 documents:  $SHARD1_COUNT"
 echo "shard2 documents:  $SHARD2_COUNT"
 echo "shard1 replicas:   3"
 echo "shard2 replicas:   3"
+echo "Redis:              PONG"
 
 echo
 echo "ReplicaSet shard1:"

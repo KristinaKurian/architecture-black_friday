@@ -7,6 +7,7 @@ DC=(docker compose -f "$COMPOSE_FILE")
 
 SHARD1_URI='mongodb://shard1-1:27018,shard1-2:27018,shard1-3:27018/?replicaSet=shard1'
 SHARD2_URI='mongodb://shard2-1:27019,shard2-2:27019,shard2-3:27019/?replicaSet=shard2'
+CACHE_URL='http://localhost:8080/helloDoc/users'
 
 mongo_eval() {
     local service="$1"
@@ -30,10 +31,40 @@ number_from() {
     tail -n 1 | tr -d '\r '
 }
 
+wait_http() {
+    local url="$1"
+
+    for ((i=1; i<=30; i++)); do
+        if curl -fsS --max-time 5 -o /dev/null "$url"; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    return 1
+}
+
+less_than_100ms() {
+    local value="$1"
+    awk -v value="$value" 'BEGIN { exit !(value < 0.100) }'
+}
+
 FAILED=0
 
 echo "=== Docker services ==="
 "${DC[@]}" ps
+
+echo
+echo "=== Redis ==="
+REDIS_PING="$("${DC[@]}" exec -T redis redis-cli ping | tr -d '\r ')"
+echo "Redis ping: $REDIS_PING"
+
+if [[ "$REDIS_PING" != "PONG" ]]; then
+    echo "ERROR: Redis did not return PONG"
+    FAILED=1
+else
+    echo "OK: Redis is available"
+fi
 
 echo
 echo "=== Config Server ==="
@@ -189,14 +220,37 @@ echo "=== Sharding status ==="
 mongo_eval mongos_router 27020 'sh.status()'
 
 echo
-echo "=== Application ==="
-if command -v curl >/dev/null 2>&1; then
-    echo "GET http://localhost:8080/"
-    curl -fsS --max-time 10 http://localhost:8080/ || \
-        echo "WARNING: root endpoint did not return a successful HTTP response"
-    echo
+echo "=== Cache performance: /helloDoc/users ==="
+if ! command -v curl >/dev/null 2>&1; then
+    echo "ERROR: curl is required to validate cache response time"
+    FAILED=1
+elif ! wait_http "$CACHE_URL"; then
+    echo "ERROR: application endpoint is unavailable: $CACHE_URL"
+    FAILED=1
 else
-    echo "curl is not installed; open http://localhost:8080/ in a browser"
+    # wait_http makes the first request and warms the cache.
+    SECOND_TIME="$(curl -fsS --max-time 10 -o /dev/null -w "%{time_total}" "$CACHE_URL")"
+    THIRD_TIME="$(curl -fsS --max-time 10 -o /dev/null -w "%{time_total}" "$CACHE_URL")"
+
+    echo "Second request: ${SECOND_TIME}s"
+    echo "Third request:  ${THIRD_TIME}s"
+
+    if less_than_100ms "$SECOND_TIME"; then
+        echo "OK: second request < 100 ms"
+    else
+        echo "ERROR: second request must be < 100 ms"
+        FAILED=1
+    fi
+
+    if less_than_100ms "$THIRD_TIME"; then
+        echo "OK: third request < 100 ms"
+    else
+        echo "ERROR: third request must be < 100 ms"
+        FAILED=1
+    fi
+
+    REDIS_KEYS="$("${DC[@]}" exec -T redis redis-cli DBSIZE | tr -d '\r ')"
+    echo "Redis DB size after cached requests: $REDIS_KEYS"
 fi
 
 echo
@@ -207,9 +261,11 @@ if [[ "$FAILED" -ne 0 ]]; then
     exit 1
 fi
 
+echo "OK: Redis is available"
 echo "OK: 2 shards registered"
 echo "OK: total documents >= 1000"
 echo "OK: documents exist on both shards"
 echo "OK: shard1 has 3 replicas (1 PRIMARY + 2 SECONDARY)"
 echo "OK: shard2 has 3 replicas (1 PRIMARY + 2 SECONDARY)"
+echo "OK: cached requests are < 100 ms"
 echo "SUCCESS"
